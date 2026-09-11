@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alcohol Label Verification</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        .section h2 {
+            margin-top: 0;
+        }
+        label {
+            display: block;
+            margin: 10px 0 5px;
+            font-weight: bold;
+        }
+        input[type="file"], textarea, input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        textarea {
+            height: 100px;
+            font-family: monospace;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .status-pass { color: green; font-weight: bold; }
+        .status-fail { color: red; font-weight: bold; }
+        .status-review { color: orange; font-weight: bold; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+
+</head>
+<body>
+    <div class="container">
+        <h1>Alcohol Label Verification</h1>
+        <p>Upload a label image and provide the expected data to verify compliance.</p>
+
+        <!-- Single Verification Section -->
+        <div class="section">
+            <h2>Single Label Verification</h2>
+            <form id="singleForm">
+                <label for="singleImage">Label Image:</label>
+                <input type="file" id="singleImage" accept="image/*" required>
+
+                <label for="expectedData">Expected Data (JSON):</label>
+                <textarea id="expectedData" required>{
+    "brand_name": "OLD TOM DISTILLERY",
+    "abv": 45.0,
+    "net_contents": "750 mL",
+    "government_warning": "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems."
+}</textarea>
+
+                <button type="submit">Verify Single Label</button>
+            </form>
+            <div id="singleResult" class="result"></div>
+        </div>
+
+        <!-- Batch Verification Section -->
+        <div class="section">
+            <h2>Batch Verification</h2>
+            <form id="batchForm">
+                <label for="batchImages">Label Images (multiple):</label>
+                <input type="file" id="batchImages" accept="image/*" multiple required>
+
+                <label for="csvFile">Expected Data CSV:</label>
+                <input type="file" id="csvFile" accept=".csv" required>
+                <p style="font-size: 0.9em; color: #666;">CSV must have columns: image_filename, brand_name, abv, net_contents, government_warning</p>
+
+                <button type="submit">Verify Batch</button>
+            </form>
+            <div id="batchResult" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        // Helper to display results
+        function displayResult(containerId, data) {
+            const container = document.getElementById(containerId);
+            if (data.error) {
+                container.innerHTML = `<p style="color:red;">Error: ${data.error}</p>`;
+                return;
+            }
+
+            // For single result
+
+                if (data.overall_status) {
+                let statusClass = 'status-review';
+                if (data.overall_status === 'PASS') statusClass = 'status-pass';
+                if (data.overall_status === 'FAIL') statusClass = 'status-fail';
+
+                let html = `<p>Overall Status: <span class="${statusClass}">${data.overall_status}</span></p>`;
+                html += '<table><tr><th>Field</th><th>Status</th><th>Message</th></tr>';
+                for (const [field, result] of Object.entries(data.fields)) {
+                    let fieldStatus = result.status;
+                    let fieldClass = 'status-review';
+                    if (fieldStatus === 'MATCH') fieldClass = 'status-pass';
+                    if (fieldStatus === 'MISMATCH') fieldClass = 'status-fail';
+                    html += `<tr><td>${field}</td><td class="${fieldClass}">${fieldStatus}</td><td>${result.message}</td></tr>`;
+                }
+                html += '</table>';
+                html += `<p><strong>Raw OCR Text:</strong><br><pre>${data.raw_ocr_text}</pre></p>`;
+                container.innerHTML = html;
+            }
+            // For batch results
+            else if (data.results) {
+                let html = '<h3>Batch Results</h3>';
+                data.results.forEach((item, index) => {
+                    if (item.error) {
+                        html += `<p><strong>${item.filename}</strong>: Error - ${item.error}</p>`;
+                    } else {
+                        let statusClass = 'status-review';
+                        if (item.overall_status === 'PASS') statusClass = 'status-pass';
+                        if (item.overall_status === 'FAIL') statusClass = 'status-fail';
+                        html += `<p><strong>${item.filename}</strong>: <span class="${statusClass}">${item.overall_status}</span></p>`;
+                        html += '<table><tr><th>Field</th><th>Status</th><th>Message</th></tr>';
+                        for (const [field, result] of Object.entries(item.fields)) {
+                            let fieldStatus = result.status;
+                            let fieldClass = 'status-review';
+                            if (fieldStatus === 'MATCH') fieldClass = 'status-pass';
+                            if (fieldStatus === 'MISMATCH') fieldClass = 'status-fail';
+                            html += `<tr><td>${field}</td><td class="${fieldClass}">${fieldStatus}</td><td>${result.message}</td></tr>`;
+                        }
+                        html += '</table>';
+                    }
+                });
+                container.innerHTML = html;
+            }
+        }
+
+        // Single verification
+        document.getElementById('singleForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const imageFile = document.getElementById('singleImage').files[0];
+            const expectedData = document.getElementById('expectedData').value;
+
+            if (!imageFile) {
+                alert('Please select an image.');
+                return;
+            }
+
+            // Validate JSON
+            try {
+                JSON.parse(expectedData);
+            } catch (err) {
+                alert('Invalid JSON in expected data.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', imageFile);
+            formData.append('expected_data', expectedData);
+
+            try {
+                const response = await fetch('/verify', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                displayResult('singleResult', data);
+            } catch (error) {
+                document.getElementById('singleResult').innerHTML = `<p style="color:red;">Request failed: ${error}</p>`;
+            }
+        });
+
+        // Batch verification
+        document.getElementById('batchForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const imageFiles = document.getElementById('batchImages').files;
+            const csvFile = document.getElementById('csvFile').files[0];
+
+            if (imageFiles.length === 0 || !csvFile) {
+                alert('Please select images and a CSV file.');
+                return;
+            }
+
+            const formData = new FormData();
+            for (let i = 0; i < imageFiles.length; i++) {
+                formData.append('files', imageFiles[i]);
+            }
+            formData.append('expected_data_file', csvFile);
+
+            try {
+                const response = await fetch('/verify-batch', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                displayResult('batchResult', data);
+            } catch (error) {
+                document.getElementById('batchResult').innerHTML = `<p style="color:red;">Request failed: ${error}</p>`;
+            }
+        });
+    </script>
+</body>
+</html>
