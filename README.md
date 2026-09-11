@@ -36,7 +36,7 @@ Open your browser and go to `http://localhost:3456`. The application will be rea
 If you prefer to build the image yourself from source, you can clone the repository and build:
 
 ```bash
-git clone https://github.com/yourusername/alcohol-label-verify.git
+git clone https://github.com/ajferrante26/alcohol-label-verify.git
 cd alcohol-label-verify
 docker build -t alcohol-label-verify .
 docker run -p 3456:3456 alcohol-label-verify
@@ -47,7 +47,7 @@ docker run -p 3456:3456 alcohol-label-verify
 1. **Clone the repository**:
 
 ```bash
-git clone https://github.com/yourusername/alcohol-label-verify.git
+git clone https://github.com/ajferrante26/alcohol-label-verify.git
 cd alcohol-label-verify
 ```
 
